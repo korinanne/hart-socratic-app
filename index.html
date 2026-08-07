@@ -119,26 +119,24 @@
     let apiKey = localStorage.getItem("gemini_api_key") || "";
     let cachedModelName = "";
 
-    const SYSTEM_PROMPT = `You are a Socratic study assistant for Professor Wattley's first-year law students, guiding them through Henry M. Hart Jr.'s article "The Aims of the Criminal Law."
+    const SYSTEM_PROMPT = `You are a Socratic study coach for law students studying Henry M. Hart Jr.'s "The Aims of the Criminal Law".
 
-CRITICAL FORMATTING RULES:
-- You must ONLY output the exact conversational words intended for the student.
-- ALWAYS enclose your response inside <response> and </response> tags.
-- NEVER write plan steps, reasoning, bullet points, checklists, or phrases like "The student wants..." or "Plan:".
+STRICT ROLE INSTRUCTION:
+- You are in a live text chat with a student.
+- Speak ONLY as the Socratic coach.
+- NEVER write out planning steps, internal monologues, options, self-checklists, or phrases like "Plan:", "The student wants...", "Wait,", or "Let's try".
+- Output ONLY the direct 1-3 sentence Socratic response to the student.
 
-EXAMPLE CORRECT OUTPUT:
-<response>To get us started on Hart's main argument: when you think about why society punishes criminals, do you think there is just one primary goal, or are there several competing goals at play?</response>
+CORE SOCRATIC RULES:
+- Ask ONE concise, probing question at a time to lead the student to discover Hart's concepts.
+- NEVER give direct answers or explain Hart's theory upfront.
+- Build directly on what the student says in their latest input.
 
-CRITICAL SOCRATIC RULES:
-- NEVER provide direct answers before students attempt responses. Always ask first, explain never (until the student tries).
-- Ask ONE clear, probing question at a time to lead the student to their own realization.
-- Use graduated prompting based on the student's input.
-
-KEY TEACHING POINTS TO COVER:
-- Multi-Valued Nature: Competing purposes (deterrence, rehabilitation, incapacitation, retribution, moral education, alternatives to vengeance). No single purpose dominates.
-- Hart's Method (3 parts): General commands, community authority behind commands, sanctions backed by community enforcement.
-- Community Condemnation Theory: Essential distinction that criminal sanctions carry a judgment of community condemnation. Physical consequences derive character from moral condemnation. Explains unique stigma of criminal conviction.
-- Institutional Perspective: Different actors (legislators, prosecutors, judges, parole boards) legitimately prioritize different aims based on their roles.`;
+CORE CONCEPTS TO GUIDE THEM TO:
+- Multi-Valued Nature of Criminal Law (competing aims: deterrence, rehabilitation, incapacitation, retribution, moral education)
+- The Method of Criminal Law (general commands, authority, enforcement)
+- Community Condemnation Theory (moral stigma attached to criminal conviction)
+- Institutional Perspective (different legal actors legitimately prioritize different aims)`;
 
     const WELCOME_MESSAGE = `Welcome! I'm your Criminal Law Aims study assistant for Henry M. Hart Jr.'s 'The Aims of the Criminal Law.' I'll guide you through Hart's analysis of criminal justice purposes using Socratic questioning - you'll do the thinking, I'll ask the right questions.
 
@@ -184,51 +182,54 @@ What would help you most today?`;
       appendMessage("assistant", WELCOME_MESSAGE);
     }
 
-    // Advanced Response Filter to eliminate any AI meta-thoughts or plan leakage
+    // Extraction algorithm to isolate the exact conversational text
     function extractCleanResponse(rawText) {
-      // 1. First choice: Extract exact text inside <response>...</response>
-      const match = rawText.match(/<response>([\s\S]*?)<\/response>/i);
-      if (match && match[1].trim()) {
-        return match[1].trim();
-      }
+      if (!rawText) return "";
 
-      // 2. Fallback filter: Remove tags and strip out meta-thought lines
-      let cleaned = rawText.replace(/<\/?response>/gi, '');
-      const lines = cleaned.split('\n');
-      const filteredLines = [];
-
-      for (let line of lines) {
-        let trimmed = line.trim();
-        if (!trimmed) continue;
-
-        // Skip meta-analysis, planning lines, and bullet lists
-        if (trimmed.match(/^(the student|i need to|plan:|goal:|step \d|socratic|topic:|user input:|constraint|thought:|\*|#)/i)) {
-          continue;
-        }
-        if (trimmed.match(/^(1\.|2\.|3\.|4\.)\s/)) {
-          // If it starts with "1. Ask the student:", clean the prefix
-          if (trimmed.toLowerCase().includes("ask the student")) {
-            trimmed = trimmed.replace(/^(1\.|2\.|3\.|4\.)\s*(ask the student:?)/i, '').trim();
-          } else {
-            continue;
+      // 1. Look for text wrapped in double quotes at or near the end
+      const quoteMatches = [...rawText.matchAll(/"([^"\n]{15,})"/g)];
+      if (quoteMatches.length > 0) {
+        for (let i = quoteMatches.length - 1; i >= 0; i--) {
+          const q = quoteMatches[i][1].trim();
+          const lower = q.toLowerCase();
+          if (!lower.startsWith("plan") && !lower.startsWith("the student") && !lower.includes("socratic")) {
+            return q;
           }
         }
-
-        filteredLines.push(trimmed);
       }
 
-      let result = filteredLines.join('\n').trim();
+      // 2. Filter paragraphs from bottom up
+      const paragraphs = rawText.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+      for (let i = paragraphs.length - 1; i >= 0; i--) {
+        const p = paragraphs[i];
+        const lower = p.toLowerCase();
+        
+        // Skip meta-paragraphs
+        if (
+          lower.startsWith("plan:") ||
+          lower.startsWith("goal:") ||
+          lower.startsWith("step") ||
+          lower.startsWith("the student") ||
+          lower.startsWith("wait,") ||
+          lower.startsWith("actually,") ||
+          lower.startsWith("let's try") ||
+          lower.includes("socratic method?") ||
+          lower.startsWith("1.") ||
+          lower.startsWith("*") ||
+          lower.startsWith("#")
+        ) {
+          const matchInside = p.match(/:\s*"([^"]+)"/);
+          if (matchInside) return matchInside[1].trim();
+          continue;
+        }
 
-      // 3. Fallback: If filtered lines leave nothing, look for text in quotes or return last sentence
-      if (!result) {
-        const quoteMatch = rawText.match(/"([^"]{15,})"/);
-        if (quoteMatch) return quoteMatch[1].trim();
-
-        const nonMeta = lines.map(l => l.trim()).filter(l => l && !l.toLowerCase().startsWith("plan"));
-        return nonMeta[nonMeta.length - 1] || rawText.trim();
+        return p.replace(/^["']|["']$/g, '').trim();
       }
 
-      return result;
+      // 3. Fallback to last non-empty line
+      const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+      const lastLine = lines[lines.length - 1] || rawText;
+      return lastLine.replace(/^["']|["']$/g, '').trim();
     }
 
     function appendMessage(role, text) {
@@ -250,7 +251,7 @@ What would help you most today?`;
       chatBox.appendChild(msgDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Track history for API and PDF
+      // Track ONLY the cleaned text in history so future calls stay clean
       conversationHistory.push({ role: role, parts: [{ text: text }] });
     }
 
@@ -327,7 +328,11 @@ What would help you most today?`;
         systemInstruction: {
           parts: [{ text: SYSTEM_PROMPT }]
         },
-        contents: apiContents
+        contents: apiContents,
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.8
+        }
       };
 
       for (const model of modelsToTry) {

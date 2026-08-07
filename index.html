@@ -121,19 +121,17 @@
 
     const SYSTEM_PROMPT = `You are a Socratic study assistant for Professor Wattley's first-year law students, guiding them through Henry M. Hart Jr.'s article "The Aims of the Criminal Law."
 
-STRICT OUTPUT RULES:
-- Output ONLY the final conversational message intended for the student.
-- NEVER output internal monologue, planning steps, scratchpads, thought processes, constraint checklists, bulleted analysis, or meta-reasoning.
-- Speak directly to the student in a natural, conversational, coaching voice.
+CRITICAL RESPONSE FORMATTING RULE:
+- You MUST put your ONLY student-facing conversational message inside <response> and </response> tags.
+- Example: <response>To understand Hart's main argument, let's start here: when society punishes a crime, do you think there is just one primary goal, or several competing goals at play?</response>
+- Do NOT include any thought process, bullet points, checklists, or steps outside or inside the <response> tags.
 
-CRITICAL RULE: STUDENT-FIRST SOCRATIC COACHING
-- Ask questions and guide student discovery step-by-step based on their input.
-- NEVER provide direct answers before students attempt responses.
-- Always ask first, explain never (until the student tries).
-- Use graduated prompting: open questions first, then specific hints if needed.
-- Keep responses focused: acknowledge what the student said, then ask one clear probing question to guide their next thought.
+CRITICAL SOCRATIC RULES:
+- NEVER provide direct answers before students attempt responses. Always ask first, explain never (until the student tries).
+- Ask one clear question at a time to lead the student to their own realization.
+- Use graduated prompting based on the student's input.
 
-KEY TEACHING POINTS TO COVER OVER THE SESSION:
+KEY TEACHING POINTS TO COVER:
 - Multi-Valued Nature: Competing purposes (deterrence, rehabilitation, incapacitation, retribution, moral education, alternatives to vengeance). No single purpose dominates.
 - Hart's Method (3 parts): General commands, community authority behind commands, sanctions backed by community enforcement.
 - Community Condemnation Theory: Essential distinction that criminal sanctions carry a judgment of community condemnation. Physical consequences derive character from moral condemnation. Explains unique stigma of criminal conviction.
@@ -183,14 +181,22 @@ What would help you most today?`;
       appendMessage("assistant", WELCOME_MESSAGE);
     }
 
-    function cleanAIResponse(text) {
-      // Strips out any accidental thinking blocks or meta-planning if a model attempts to output scratchpad text
-      let cleaned = text;
-      if (cleaned.includes("Topic:")) {
-        const parts = cleaned.split("\n\n");
-        cleaned = parts[parts.length - 1]; // Take only the last conversational paragraph
+    // Isolate ONLY the clean conversational text inside <response> tags
+    function extractCleanResponse(rawText) {
+      const match = rawText.match(/<response>([\s\S]*?)<\/response>/i);
+      if (match && match[1].trim()) {
+        return match[1].trim();
       }
-      return cleaned.trim();
+
+      // Fallback parser if the model omits tags: remove bulleted scratchpad lines
+      const cleanLines = rawText.split('\n').filter(line => {
+        const l = line.trim();
+        if (l.startsWith('*') || l.startsWith('-') || l.startsWith('#')) return false;
+        if (l.match(/^(topic|goal|step|user input|constraint|socratic|hart's core|initial thought|refinement|question \d)/i)) return false;
+        return true;
+      });
+
+      return cleanLines.join('\n').trim() || rawText.trim();
     }
 
     function appendMessage(role, text) {
@@ -306,9 +312,9 @@ What would help you most today?`;
 
           if (response.ok && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             document.getElementById("loadingIndicator")?.remove();
-            let aiResponse = data.candidates[0].content.parts[0].text;
-            aiResponse = cleanAIResponse(aiResponse); // Ensure clean output
-            appendMessage("assistant", aiResponse);
+            let rawAiResponse = data.candidates[0].content.parts[0].text;
+            let cleanResponse = extractCleanResponse(rawAiResponse);
+            appendMessage("assistant", cleanResponse);
             cachedModelName = model;
             success = true;
             break;

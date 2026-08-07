@@ -109,7 +109,7 @@
   <!-- Application Logic -->
   <script>
     let studentName = "";
-    let apiHistory = [];
+    let apiHistory = []; // Clean memory array strictly starting with 'user'
     let apiKey = localStorage.getItem("gemini_api_key") || "";
 
     const SYSTEM_PROMPT = `You are a supportive, rigorous Socratic study coach for 1L law students studying Henry M. Hart Jr.'s "The Aims of the Criminal Law".
@@ -122,17 +122,17 @@ CRITICAL RULES:
 2. NEVER grade or evaluate their input directly.
 3. ALWAYS validate their intuition first, then ask a probing follow-up question that highlights a tension or pushes deeper into Hart's text.
 4. Keep responses conversational and brief (2 to 3 sentences max).
-5. NEVER reveal planning, bullet points, or meta-thoughts.
+5. NEVER write out internal thoughts, plan steps, or meta-analysis.
 
-HOW TO RESPOND TO STUDENT ANSWERS (FEW-SHOT EXAMPLES):
+EXAMPLES OF HOW TO RESPOND TO STUDENTS:
 
 Example 1:
-Student: "To punish the guilty and prevent future crimes."
-Coach: "You've highlighted two major goals right there—retribution and deterrence. But what happens when preventing future crime calls for a light sentence, while 'punishing the guilty' demands a harsh one? How does Hart suggest the law balances competing aims like those?"
+Student: "Main argument"
+Coach: "To understand Hart's central thesis, let's start with the big picture: when society punishes a crime, do you think there is just one primary goal, or are there several competing goals at play?"
 
 Example 2:
-Student: "To prevent future crimes."
-Coach: "Deterrence is certainly a central purpose. But suppose a court could prevent future crimes by harshly punishing an innocent person as an example to others—would society consider that a valid criminal conviction? What essential element would be missing?"
+Student: "To punish the guilty and prevent future crimes."
+Coach: "You've highlighted two major goals right there—retribution and deterrence. But what happens when preventing future crime calls for a light sentence, while 'punishing the guilty' demands a harsh one? How does Hart suggest the law balances competing aims like those?"
 
 Example 3:
 Student: "The main difference between civil and criminal law is that criminal law involves jail time."
@@ -181,8 +181,8 @@ What topic would you like to start with today?
       document.getElementById("chatScreen").classList.remove("hidden");
       document.getElementById("downloadPdfBtn").classList.remove("hidden");
 
+      // Display initial welcome visually (do NOT push to apiHistory)
       renderBubble("model", WELCOME_MESSAGE);
-      apiHistory.push({ role: "model", parts: [{ text: WELCOME_MESSAGE }] });
     }
 
     function renderBubble(role, text) {
@@ -223,10 +223,12 @@ What topic would you like to start with today?
         return;
       }
 
+      // Render user input and add to API history
       renderBubble("user", userText);
       apiHistory.push({ role: "user", parts: [{ text: userText }] });
       inputEl.value = "";
 
+      // Show typing indicator
       const chatBox = document.getElementById("chatBox");
       const loadingDiv = document.createElement("div");
       loadingDiv.id = "loadingIndicator";
@@ -235,8 +237,10 @@ What topic would you like to start with today?
       chatBox.appendChild(loadingDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      // Primary supported models
+      const models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"];
       let responseText = "";
+      let errorDetails = "";
 
       for (const model of models) {
         try {
@@ -244,10 +248,10 @@ What topic would you like to start with today?
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
               contents: apiHistory,
               generationConfig: {
-                temperature: 0.4
+                temperature: 0.3
               }
             })
           });
@@ -256,9 +260,11 @@ What topic would you like to start with today?
           if (res.ok && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             responseText = data.candidates[0].content.parts[0].text.trim();
             break;
+          } else if (data.error) {
+            errorDetails = data.error.message;
           }
         } catch (err) {
-          console.warn(`Model ${model} failed, trying next...`);
+          errorDetails = err.message;
         }
       }
 
@@ -268,7 +274,8 @@ What topic would you like to start with today?
         renderBubble("model", responseText);
         apiHistory.push({ role: "model", parts: [{ text: responseText }] });
       } else {
-        renderBubble("model", "⚠️ Unable to generate a response. Please check that your API key is valid in the top-right configuration.");
+        const fallbackMsg = errorDetails ? `⚠️ API Error: ${errorDetails}` : "⚠️ Unable to generate a response. Please check your API key.";
+        renderBubble("model", fallbackMsg);
       }
     }
 
@@ -279,7 +286,13 @@ What topic would you like to start with today?
       const transcriptContainer = document.getElementById("pdfTranscript");
       transcriptContainer.innerHTML = "";
 
-      apiHistory.forEach(msg => {
+      // Print full transcript including welcome message
+      const fullTranscript = [
+        { role: "model", parts: [{ text: WELCOME_MESSAGE }] },
+        ...apiHistory
+      ];
+
+      fullTranscript.forEach(msg => {
         const item = document.createElement("div");
         item.className = `p-2 rounded ${msg.role === "user" ? "bg-slate-100 border-l-2 border-slate-800" : "bg-white border border-slate-200"}`;
         item.innerHTML = `<strong>${msg.role === "user" ? studentName : "Socratic Coach"}:</strong><br>` + 

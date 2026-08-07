@@ -239,8 +239,14 @@ What would help you most today?`;
       chatBox.appendChild(loadingDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Try multiple model endpoints in case specific availability varies by API key
-      const modelNames = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      // Updated endpoint model sequence to match current v1beta Gemini API standards
+      const modelNames = [
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro-latest",
+        "gemini-2.0-flash-exp",
+        "gemini-pro"
+      ];
       let success = false;
       let lastErrorMessage = "";
 
@@ -276,7 +282,7 @@ What would help you most today?`;
 
       if (!success) {
         document.getElementById("loadingIndicator")?.remove();
-        appendMessage("assistant", `⚠️ **API Error:** ${lastErrorMessage}. Please verify your API key in the top-right configuration button.`);
+        appendMessage("assistant", `⚠️ **API Error:** ${lastErrorMessage}. Please ensure your API key was created in Google AI Studio (aistudio.google.com).`);
       }
     }
 

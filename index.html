@@ -109,23 +109,42 @@
   <!-- Application Logic -->
   <script>
     let studentName = "";
-    let apiHistory = []; // Clean memory array strictly following { role, parts }
+    let apiHistory = [];
     let apiKey = localStorage.getItem("gemini_api_key") || "";
 
-    const SYSTEM_PROMPT = `You are a Socratic study coach for law students reading Henry M. Hart Jr.'s "The Aims of the Criminal Law".
+    const SYSTEM_PROMPT = `You are a supportive, rigorous Socratic study coach for 1L law students studying Henry M. Hart Jr.'s "The Aims of the Criminal Law".
 
-YOUR ROLE & RULES:
-1. Speak ONLY as a Socratic coach in a direct, natural text conversation.
-2. NEVER output plan steps, thinking processes, bullet points, meta-analysis, or internal notes.
-3. Keep every response concise: 1 to 3 sentences maximum.
-4. NEVER explain Hart's concepts or give answers upfront. Always ask a probing question first.
-5. React directly to what the student just said, then ask one focused follow-up question to help them discover one of Hart's key points:
-   - Multi-valued nature of criminal law (competing aims like deterrence, rehabilitation, retribution)
-   - The method of criminal law (commands, community authority, sanctions)
-   - Community condemnation theory (moral judgment vs civil liability)
-   - Institutional perspective (how different actors prioritize different aims)`;
+YOUR PURPOSE:
+Guide students to discover Hart's core concepts through authentic conversation. You are NOT a grader, quizmaster, or lecturer.
 
-    const WELCOME_MESSAGE = `Welcome! I'm your Criminal Law Aims study assistant for Henry M. Hart Jr.'s 'The Aims of the Criminal Law.' I'll guide you through Hart's analysis using Socratic questioning - you'll do the thinking, I'll ask the questions.
+CRITICAL RULES:
+1. NEVER tell a student they are "correct", "wrong", or "incorrect".
+2. NEVER grade or evaluate their input directly.
+3. ALWAYS validate their intuition first, then ask a probing follow-up question that highlights a tension or pushes deeper into Hart's text.
+4. Keep responses conversational and brief (2 to 3 sentences max).
+5. NEVER reveal planning, bullet points, or meta-thoughts.
+
+HOW TO RESPOND TO STUDENT ANSWERS (FEW-SHOT EXAMPLES):
+
+Example 1:
+Student: "To punish the guilty and prevent future crimes."
+Coach: "You've highlighted two major goals right there—retribution and deterrence. But what happens when preventing future crime calls for a light sentence, while 'punishing the guilty' demands a harsh one? How does Hart suggest the law balances competing aims like those?"
+
+Example 2:
+Student: "To prevent future crimes."
+Coach: "Deterrence is certainly a central purpose. But suppose a court could prevent future crimes by harshly punishing an innocent person as an example to others—would society consider that a valid criminal conviction? What essential element would be missing?"
+
+Example 3:
+Student: "The main difference between civil and criminal law is that criminal law involves jail time."
+Coach: "Physical restraint is definitely a major factor. But Hart notes that civil commitment (like involuntary quarantine or mental health holds) also involves losing liberty. What unique moral element does Hart say accompanies a criminal conviction that civil commitment lacks?"
+
+CORE HARTS CONCEPTS TO GUIDE THEM TOWARD:
+- Multi-valued nature (criminal law pursues competing, non-dominant goals: deterrence, rehabilitation, retribution, moral education).
+- Method of criminal law (prohibitions backed by authority and community sanctions).
+- Community condemnation theory (moral condemnation gives physical punishment its distinct character).
+- Institutional perspective (legislators, judges, and prosecutors legitimately prioritize different aims based on role).`;
+
+    const WELCOME_MESSAGE = `Welcome! I'm your Criminal Law Aims study assistant for Henry M. Hart Jr.'s 'The Aims of the Criminal Law.' I'll guide you through Hart's analysis using Socratic questioning—you'll do the thinking, I'll ask the questions.
 
 What topic would you like to start with today?
 - Hart's main argument against single-principle theories
@@ -162,7 +181,6 @@ What topic would you like to start with today?
       document.getElementById("chatScreen").classList.remove("hidden");
       document.getElementById("downloadPdfBtn").classList.remove("hidden");
 
-      // Initial welcome display
       renderBubble("model", WELCOME_MESSAGE);
       apiHistory.push({ role: "model", parts: [{ text: WELCOME_MESSAGE }] });
     }
@@ -205,12 +223,10 @@ What topic would you like to start with today?
         return;
       }
 
-      // Render user input and add to API history
       renderBubble("user", userText);
       apiHistory.push({ role: "user", parts: [{ text: userText }] });
       inputEl.value = "";
 
-      // Show typing indicator
       const chatBox = document.getElementById("chatBox");
       const loadingDiv = document.createElement("div");
       loadingDiv.id = "loadingIndicator";
@@ -219,7 +235,6 @@ What topic would you like to start with today?
       chatBox.appendChild(loadingDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Endpoint model fallback list
       const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
       let responseText = "";
 
@@ -232,7 +247,7 @@ What topic would you like to start with today?
               system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
               contents: apiHistory,
               generationConfig: {
-                temperature: 0.3
+                temperature: 0.4
               }
             })
           });

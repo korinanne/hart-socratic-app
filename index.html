@@ -121,14 +121,17 @@
 
     const SYSTEM_PROMPT = `You are a Socratic study assistant for Professor Wattley's first-year law students, guiding them through Henry M. Hart Jr.'s article "The Aims of the Criminal Law."
 
-CRITICAL RESPONSE FORMATTING RULE:
-- You MUST put your ONLY student-facing conversational message inside <response> and </response> tags.
-- Example: <response>To understand Hart's main argument, let's start here: when society punishes a crime, do you think there is just one primary goal, or several competing goals at play?</response>
-- Do NOT include any thought process, bullet points, checklists, or steps outside or inside the <response> tags.
+CRITICAL FORMATTING RULES:
+- You must ONLY output the exact conversational words intended for the student.
+- ALWAYS enclose your response inside <response> and </response> tags.
+- NEVER write plan steps, reasoning, bullet points, checklists, or phrases like "The student wants..." or "Plan:".
+
+EXAMPLE CORRECT OUTPUT:
+<response>To get us started on Hart's main argument: when you think about why society punishes criminals, do you think there is just one primary goal, or are there several competing goals at play?</response>
 
 CRITICAL SOCRATIC RULES:
 - NEVER provide direct answers before students attempt responses. Always ask first, explain never (until the student tries).
-- Ask one clear question at a time to lead the student to their own realization.
+- Ask ONE clear, probing question at a time to lead the student to their own realization.
 - Use graduated prompting based on the student's input.
 
 KEY TEACHING POINTS TO COVER:
@@ -181,22 +184,51 @@ What would help you most today?`;
       appendMessage("assistant", WELCOME_MESSAGE);
     }
 
-    // Isolate ONLY the clean conversational text inside <response> tags
+    // Advanced Response Filter to eliminate any AI meta-thoughts or plan leakage
     function extractCleanResponse(rawText) {
+      // 1. First choice: Extract exact text inside <response>...</response>
       const match = rawText.match(/<response>([\s\S]*?)<\/response>/i);
       if (match && match[1].trim()) {
         return match[1].trim();
       }
 
-      // Fallback parser if the model omits tags: remove bulleted scratchpad lines
-      const cleanLines = rawText.split('\n').filter(line => {
-        const l = line.trim();
-        if (l.startsWith('*') || l.startsWith('-') || l.startsWith('#')) return false;
-        if (l.match(/^(topic|goal|step|user input|constraint|socratic|hart's core|initial thought|refinement|question \d)/i)) return false;
-        return true;
-      });
+      // 2. Fallback filter: Remove tags and strip out meta-thought lines
+      let cleaned = rawText.replace(/<\/?response>/gi, '');
+      const lines = cleaned.split('\n');
+      const filteredLines = [];
 
-      return cleanLines.join('\n').trim() || rawText.trim();
+      for (let line of lines) {
+        let trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Skip meta-analysis, planning lines, and bullet lists
+        if (trimmed.match(/^(the student|i need to|plan:|goal:|step \d|socratic|topic:|user input:|constraint|thought:|\*|#)/i)) {
+          continue;
+        }
+        if (trimmed.match(/^(1\.|2\.|3\.|4\.)\s/)) {
+          // If it starts with "1. Ask the student:", clean the prefix
+          if (trimmed.toLowerCase().includes("ask the student")) {
+            trimmed = trimmed.replace(/^(1\.|2\.|3\.|4\.)\s*(ask the student:?)/i, '').trim();
+          } else {
+            continue;
+          }
+        }
+
+        filteredLines.push(trimmed);
+      }
+
+      let result = filteredLines.join('\n').trim();
+
+      // 3. Fallback: If filtered lines leave nothing, look for text in quotes or return last sentence
+      if (!result) {
+        const quoteMatch = rawText.match(/"([^"]{15,})"/);
+        if (quoteMatch) return quoteMatch[1].trim();
+
+        const nonMeta = lines.map(l => l.trim()).filter(l => l && !l.toLowerCase().startsWith("plan"));
+        return nonMeta[nonMeta.length - 1] || rawText.trim();
+      }
+
+      return result;
     }
 
     function appendMessage(role, text) {
